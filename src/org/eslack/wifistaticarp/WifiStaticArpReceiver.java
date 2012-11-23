@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.net.UnknownHostException;
 import java.net.InetAddress;
 import android.os.AsyncTask;
+import android.widget.Toast;
 
 import com.stericson.RootTools.*;
 
@@ -25,87 +26,90 @@ public class WifiStaticArpReceiver extends BroadcastReceiver {
 	@Override
 	public void onReceive(Context context, Intent intent) {
 
+		final Context mContext = context;
+
+		class SetStaticArpTask extends AsyncTask<Void, Void, Boolean> {
+
+			private static final String TAG = "SetStaticArpTask";
+
+			private Utils mUtils = new Utils();
+
+			private String interfaceName;
+			private String gatewayIP;
+			private String gatewayMAC;
+
+			protected Boolean doInBackground(Void... params) {
+
+				interfaceName = android.os.SystemProperties.get ("wifi.interface", "unknown");
+				if (interfaceName.equals("unknown")) {
+					Log.v(TAG, "Aborting: can't get wifi interface name");
+					return false;
+				}
+
+				gatewayIP = android.os.SystemProperties.get("dhcp." + interfaceName + ".gateway", "unknown");
+				if (gatewayIP.equals("unknown")) {
+					Log.v(TAG, "Aborting: can't get gateway IP address");
+					return false;
+				}
+
+				// make sure the gateway mac is in the arp cache
+				try {
+					InetAddress.getByName(gatewayIP).isReachable(4000);
+				} catch (UnknownHostException e) {
+					e.printStackTrace();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+
+				gatewayMAC = mUtils.getMacFromArpCache(gatewayIP);
+				if (gatewayMAC == null || gatewayMAC.equals("00:00:00:00:00:00")) {
+					// retry getting the gateway mac address
+					Log.v("WifiStaticArp", "RETRYING: "+ interfaceName + " " + gatewayIP + " " + gatewayMAC);
+					try {
+						Thread.sleep(1000);
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
+					mUtils.exec("ping -c 2 -w 2 " + gatewayIP);
+					gatewayMAC = mUtils.getMacFromArpCache(gatewayIP);
+				}
+
+				if (gatewayMAC == null || gatewayMAC.equals("00:00:00:00:00:00")) {
+					return false;
+				}
+
+				return true;
+			}
+
+			protected void onPostExecute(Boolean result) {
+
+				String output;
+				if (result == true) {
+					RootTools.useRoot=true;
+					if (RootTools.isAccessGiven()) {
+						mUtils.exec("ip neighbor add " + gatewayIP + " lladdr " + gatewayMAC + " nud permanent dev " + interfaceName);
+						mUtils.exec("ip neighbor change " + gatewayIP + " lladdr " + gatewayMAC + " nud permanent dev " + interfaceName);
+						output = "MAC address " + gatewayMAC + " static for " + gatewayIP + " on " + interfaceName;
+					} else {
+						output = "Could not set static ARP on the gateway mac, no root access given.";
+					}
+
+				} else {
+					output = "Could not set static ARP on the gateway mac";
+				}
+				Log.v(TAG, output);
+				Toast.makeText(mContext, output, Toast.LENGTH_LONG).show();
+			}
+		}
+
 		int wifiState = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE,WifiManager.WIFI_STATE_UNKNOWN);
 		//Log.d(TAG, (new StringBuilder("onReceive() intent: ")).append(intent).toString());
 
 		switch(wifiState){
 			case WifiManager.WIFI_STATE_ENABLED:
 				Log.v(TAG, "WIFI_STATE_ENABLED");
-				new SetStaticArpTask().execute("WIFI_STATE_ENABLED");
+				new SetStaticArpTask().execute();
 			break;
 		}
-	}
-}
-
-class SetStaticArpTask extends AsyncTask<String, Void, Boolean> {
-
-	private static final String TAG = "SetStaticArpTask";
-
-        private Utils mUtils = new Utils();
-
-	private String interfaceName;
-	private String gatewayIP;
-	private String gatewayMAC;
-
-	protected Boolean doInBackground(String... str) {
-
-		interfaceName = android.os.SystemProperties.get ("wifi.interface", "unknown");
-		if (interfaceName.equals("unknown")) {
-			Log.v(TAG, "Aborting: can't get wifi interface name");
-			return false;
-		}
-
-		gatewayIP = android.os.SystemProperties.get("dhcp." + interfaceName + ".gateway", "unknown");
-		if (gatewayIP.equals("unknown")) {
-			Log.v(TAG, "Aborting: can't get gateway IP address");
-			return false;
-		}
-
-		// make sure the gateway mac is in the arp cache
-		try {
-			InetAddress.getByName(gatewayIP).isReachable(4000);
-		} catch (UnknownHostException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-
-		gatewayMAC = mUtils.getMacFromArpCache(gatewayIP);
-		if (gatewayMAC == null || gatewayMAC.equals("00:00:00:00:00:00")) {
-			// retry getting the gateway mac address
-			Log.v("WifiStaticArp", "RETRYING: "+ interfaceName + " " + gatewayIP + " " + gatewayMAC);
-			try {
-				Thread.sleep(1000);
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-			mUtils.exec("ping -c 2 -w 2 " + gatewayIP);
-			gatewayMAC = mUtils.getMacFromArpCache(gatewayIP);
-		}
-
-		if (gatewayMAC == null || gatewayMAC.equals("00:00:00:00:00:00")) {
-			return false;
-		}
-
-		return true;
-	}
-
-	protected void onPostExecute(Boolean result) {
-
-		String output;
-		if (result == true) {
-			RootTools.useRoot=true;
-			if (RootTools.isAccessGiven()) {
-				mUtils.exec("ip neighbor add " + gatewayIP + " lladdr " + gatewayMAC + " nud permanent dev " + interfaceName);
-				mUtils.exec("ip neighbor change " + gatewayIP + " lladdr " + gatewayMAC + " nud permanent dev " + interfaceName);
-				output = "MAC address " + gatewayMAC + " static for " + gatewayIP + " on " + interfaceName;
-			} else {
-				output = "Could not set static ARP on the gateway mac, no root access given.";
-			}
-
-		} else {
-			output = "Could not set static ARP on the gateway mac";
-		}
-		Log.v(TAG, output);
 	}
 }
