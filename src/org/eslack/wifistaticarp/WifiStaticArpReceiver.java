@@ -64,7 +64,7 @@ public class WifiStaticArpReceiver extends BroadcastReceiver {
 				gatewayMAC = mUtils.getMacFromArpCache(gatewayIP);
 				if (gatewayMAC == null || gatewayMAC.equals("00:00:00:00:00:00")) {
 					// retry getting the gateway mac address
-					Log.v("WifiStaticArp", "RETRYING: "+ interfaceName + " " + gatewayIP + " " + gatewayMAC);
+					Log.v(TAG, "RETRYING: "+ interfaceName + " " + gatewayIP + " " + gatewayMAC);
 					try {
 						Thread.sleep(1000);
 					} catch (Exception e) {

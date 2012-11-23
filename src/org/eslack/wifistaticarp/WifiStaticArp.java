@@ -7,17 +7,25 @@ package org.eslack.wifistaticarp;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.widget.TextView;
+import android.widget.*;
+
+import com.stericson.RootTools.*;
 
 public class WifiStaticArp extends Activity
 {
-    /** Called when the activity is first created. */
-    @Override
-    public void onCreate(Bundle savedInstanceState)
-    {
-        super.onCreate(savedInstanceState);
-        TextView tv = new TextView(this);
-        tv.setText("Thanks for using WifiStaticArp!");
-        setContentView(tv);
-    }
+	/** Called when the activity is first created. */
+	@Override
+	public void onCreate(Bundle savedInstanceState)
+	{
+		super.onCreate(savedInstanceState);
+		setContentView(R.layout.main);
+		CheckBox checkBox = (CheckBox) findViewById(R.id.checkbox);
+
+		RootTools.useRoot=true;
+		if (RootTools.isAccessGiven()) {
+			checkBox.setChecked(true);
+		} else {
+			checkBox.setChecked(false);
+		}
+	}
 }
